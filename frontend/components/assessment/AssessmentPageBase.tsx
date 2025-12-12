@@ -161,7 +161,10 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
         );
     };
 
-    const STORAGE_KEY = `assessment_${config.type}_${config.castleId}`;
+    // Get user ID for storage key
+    const authData = authUtils.getAuthData();
+    const userId = authData.user?.id || 'guest';
+    const STORAGE_KEY = `assessment_${config.type}_${config.castleId}_${userId}`;
 
     // Check if assessment is already completed on mount
     useEffect(() => {
@@ -180,8 +183,8 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
                     
                     // Keep results in the format returned by backend
                     const formattedResults = {
-                        totalScore: existingResults.totalScore || Math.round((existingResults.percentage / 100) * (existingResults.totalQuestions || 60)),
-                        totalQuestions: existingResults.totalQuestions || 60,
+                        totalScore: existingResults.totalScore || Math.round((existingResults.percentage / 100) * (existingResults.totalQuestions || config.totalQuestions)),
+                        totalQuestions: existingResults.totalQuestions || config.totalQuestions,
                         percentage: existingResults.percentage,
                         categoryScores: existingResults.categoryScores || {}, // Keep as object
                         completedAt: existingResults.completedAt
@@ -534,9 +537,16 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
                 }
                 
                 console.log(`[${config.type}] About to update state - results and stage`);
+                
+                // Update results first
                 setResults(transformedResults);
-                setStage('results');
-                console.log(`[${config.type}] State updated - should trigger re-render`);
+                
+                // Use setTimeout to ensure state is updated before changing stage
+                setTimeout(() => {
+                    setStage('results');
+                    console.log(`[${config.type}] State updated to results - rendering now`);
+                }, 100);
+                
                 localStorage.removeItem(STORAGE_KEY); // Clear progress after completion
                 setRestoredProgress(false);
                 setStartTime(null);
@@ -730,13 +740,16 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
 
     // RESULTS STAGE
     if (stage === 'results') {
+        console.log(`[${config.type}] Rendering results stage with:`, results);
+        
         return renderStage(
             <AssessmentResults
+                key={`results-${results?.completedAt || Date.now()}`}
                 results={results || {
                     totalScore: 0,
                     totalQuestions: config.totalQuestions,
                     percentage: 0,
-                    categoryScores: [],
+                    categoryScores: {},
                     completedAt: new Date().toISOString()
                 }}
                 assessmentType={config.type}
