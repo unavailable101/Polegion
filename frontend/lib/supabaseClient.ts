@@ -5,12 +5,17 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    autoRefreshToken: false,
-    persistSession: false,
+    autoRefreshToken: true,     // ✅ Enable automatic token refresh
+    persistSession: true,        // ✅ Persist session across reloads
+    detectSessionInUrl: true,    // ✅ Handle OAuth redirects
+    storageKey: 'polegion-auth', // Custom storage key
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
   },
   realtime: {
     params: {
       eventsPerSecond: 10
-    }
+    },
+    timeout: 30000, // 30 seconds timeout
+    heartbeatIntervalMs: 30000, // Send heartbeat every 30 seconds
   }
 });

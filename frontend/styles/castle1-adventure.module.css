@@ -297,6 +297,11 @@
   border-radius: 0.25rem;
 }
 
+.chapterList::-webkit-scrollbar-track {
+  background: #213555;
+  border-radius: 0.25rem;
+}
+
 .chapterList::-webkit-scrollbar-thumb {
   background: #D8C4B6;
   border-radius: 0.25rem;
