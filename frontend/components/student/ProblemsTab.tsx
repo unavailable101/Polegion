@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import { FaBook, FaExternalLinkAlt, FaEye, FaEyeSlash, FaBullseye, FaClock } from 'react-icons/fa'
 import styles from '@/styles/room-details.module.css'
 import { TProblemType, SProblemType } from '@/types'
+import Swal from 'sweetalert2'
 
 interface ProblemsTabProps {
     problems: (TProblemType | SProblemType)[]
@@ -26,16 +27,47 @@ export default function ProblemsTab({ problems, roomCode }: ProblemsTabProps) {
         }
     }
 
-    const handleOpenProblem = (problemId: string | undefined) => {
-        if (problemId) {
-            router.push(`/student/joined-rooms/${roomCode}/problem/${problemId}`)
+    const handleOpenProblem = async (problemId: string | undefined, problemTitle: string, maxAttempts: number, timer?: number) => {
+        if (!problemId) return;
+
+        // Create confirmation dialog
+        const timeText = timer ? ` You have ${Math.floor(timer / 60)}min ${timer % 60}s to complete it.` : '';
+        const attemptsText = maxAttempts === 1 ? '1 attempt' : `${maxAttempts} attempts`;
+        
+        const result = await Swal.fire({
+            title: 'Ready to Start?',
+            html: `
+                <div style="text-align: left; margin: 20px 0;">
+                    <p style="margin-bottom: 10px;"><strong>Problem:</strong> ${problemTitle}</p>
+                    <p style="margin-bottom: 10px;"><strong>Attempts:</strong> You have ${attemptsText} to solve this problem.</p>
+                    ${timer ? `<p style="margin-bottom: 10px;"><strong>Time Limit:</strong>${timeText}</p>` : ''}
+                    <p style="margin-top: 15px; color: #666;">Make sure you're ready before proceeding!</p>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: "I'm Ready!",
+            cancelButtonText: 'Cancel'
+        });
+
+        if (result.isConfirmed) {
+            router.push(`/student/joined-rooms/${roomCode}/practice-problems/${problemId}`);
         }
-    }
+    };
+
+    // Filter out hidden/private problems for students
+    // Only show problems that are explicitly public or visible (show)
+    // Hide problems with visibility: 'private', 'hidden', or 'hide'
+    const visibleProblems = problems.filter(problem => 
+        problem.visibility === 'public' || problem.visibility === 'show'
+    );
 
     return (
         <div className={styles.problemsContainer}>
             <div className={styles.problemsContent}>
-                {problems.length === 0 ? (
+                {visibleProblems.length === 0 ? (
                     <div className={styles.emptyState}>
                         <FaBook className={styles.emptyStateIcon} />
                         <h3 className={styles.emptyStateTitle}>No Problems Yet</h3>
@@ -43,19 +75,21 @@ export default function ProblemsTab({ problems, roomCode }: ProblemsTabProps) {
                     </div>
                 ) : (
                     <div>
-                        {problems.map((problem, index) => (
+                        {visibleProblems.map((problem, index) => (
                             <div key={problem.id || index} className={styles.problemCard}>
                                 <div className={styles.problemHeader}>
                                     <h3 className={styles.problemTitle}>{problem.title}</h3>
                                     <div className={styles.problemActions}>
-                                        <button 
-                                            className={`${styles.actionButton} ${styles.openButton}`}
-                                            onClick={() => handleOpenProblem(problem.id)}
-                                            title="Open problem"
-                                        >
-                                            <FaExternalLinkAlt />
-                                            Open
-                                        </button>
+                                        {(problem.visibility === 'public' || problem.visibility === 'show') && (
+                                            <button 
+                                                className={`${styles.actionButton} ${styles.openButton}`}
+                                                onClick={() => handleOpenProblem(problem.id, problem.title, problem.max_attempts, problem.timer)}
+                                                title="Open problem"
+                                            >
+                                                <FaExternalLinkAlt />
+                                                Open
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 
@@ -65,7 +99,7 @@ export default function ProblemsTab({ problems, roomCode }: ProblemsTabProps) {
                                     </span>
                                     {'visibility' in problem && (
                                         <div className={styles.visibilityIndicator}>
-                                            {problem.visibility === 'show' ? (
+                                            {problem.visibility === 'public' || problem.visibility === 'show' ? (
                                                 <><FaEye /> Visible</>
                                             ) : (
                                                 <><FaEyeSlash /> Hidden</>
@@ -84,7 +118,7 @@ export default function ProblemsTab({ problems, roomCode }: ProblemsTabProps) {
                                     {problem.timer && (
                                         <div className={styles.visibilityIndicator}>
                                             <FaClock />
-                                            <span>{problem.timer}min</span>
+                                            <span>{Math.floor(problem.timer / 60)}min {problem.timer % 60}s</span>
                                         </div>
                                     )}
                                 </div>

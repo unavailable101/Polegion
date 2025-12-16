@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { FaTrophy } from 'react-icons/fa'
+import { FaTrophy, FaBook } from 'react-icons/fa'
 import styles from '@/styles/room-details.module.css'
 import ProblemsTab from './ProblemsTab'
 import CompetitionsTab from './CompetitionsTab'
@@ -7,20 +7,22 @@ import { TabContainerProps } from '@/types'
 import { TabType } from '@/constants/ui'
 
 export default function TabContainer({ problems, competitions, roomCode }: TabContainerProps) {
-    const [activeTab, setActiveTab] = useState<TabType>('competitions')
-
+    const [activeTab, setActiveTab] = useState<TabType>('problems')
+    const newProb = problems.filter(problem => 
+        problem.visibility === 'public' || problem.visibility === 'show'
+    )
     return (
         <div className={styles.tabsContainer}>
             {/* Tab Buttons */}
             <div className={styles.tabButtons}>
-                {/* <button
+                <button
                     className={`${styles.tabButton} ${activeTab === 'problems' ? styles.tabButtonActive : ''}`}
                     onClick={() => setActiveTab('problems')}
                 >
                     <FaBook />
                     Problems
-                    <span className={styles.tabCount}>{problems.length}</span>
-                </button> */}
+                    <span className={styles.tabCount}>{newProb.length}</span>
+                </button>
                 <button
                     className={`${styles.tabButton} ${activeTab === 'competitions' ? styles.tabButtonActive : ''}`}
                     onClick={() => setActiveTab('competitions')}
@@ -34,7 +36,7 @@ export default function TabContainer({ problems, competitions, roomCode }: TabCo
             {/* Tab Content */}
             <div className={styles.tabContent}>
                 {activeTab === 'problems' ? (
-                    <ProblemsTab problems={problems} roomCode={roomCode} />
+                    <ProblemsTab problems={newProb} roomCode={roomCode} />
                 ) : (
                     <CompetitionsTab competitions={competitions} roomCode={roomCode} />
                 )}

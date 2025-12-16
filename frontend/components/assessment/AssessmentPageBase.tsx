@@ -131,10 +131,10 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
     const castleNumber = config.type === 'pretest' ? 0 : config.type === 'posttest' ? 6 : null;
     const castleBackgroundColors = (() => {
         if (castleNumber === 0) {
-            return { primary: '#37353E', accent: '#44444E' };
+            return { primary: '#2D2A3D', accent: '#4A4458' };
         }
         if (castleNumber === 6) {
-            return { primary: '#000080', accent: '#00044A' };
+            return { primary: '#1A1A4E', accent: '#2E2E6E' };
         }
         return { primary: config.theme.primaryColor, accent: config.theme.accentColor };
     })();
@@ -318,6 +318,11 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
     // LOAD ASSESSMENT QUESTIONS
     // ============================================================================
     const loadAssessment = async () => {
+        if (isLoading) {
+            console.log(`[${config.type}] Already loading assessment, skipping...`);
+            return;
+        }
+        
         setIsLoading(true);
         try {
             console.log(`[${config.type}] Loading assessment questions...`);
@@ -335,32 +340,60 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
             // Call backend API to get random questions
             const response = await generateAssessment(userId, config.type) as GenerateAssessmentResponse;
             
-            if (response.questions && response.questions.length > 0) {
-                const startedAt = startTime || new Date().toISOString();
-                if (!startTime) {
-                    setStartTime(startedAt);
-                    setElapsedSeconds(0);
-                }
-                setAssessmentQuestions(response.questions);
-                setCurrentQuestion(0);
-                setUserAnswers({});
-                console.log(`[${config.type}] Loaded ${response.questions.length} questions`);
-                setStage('assessment');
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                    stage: 'assessment',
-                    questions: response.questions,
-                    currentQ: 0,
-                    answers: {},
-                    startTime: startedAt
-                }));
-                setRestoredProgress(true);
-            } else {
-                toast.error('Failed to load assessment questions');
-                console.error('Invalid response:', response);
+            console.log(`[${config.type}] API Response:`, response);
+            
+            // Check if response has questions
+            if (!response || typeof response !== 'object') {
+                console.error('Invalid response structure:', response);
+                toast.error('No assessment questions available. Please contact your administrator to seed the database.');
+                setIsLoading(false);
+                return;
             }
+            
+            if (!response.questions || !Array.isArray(response.questions)) {
+                console.error('No questions array in response:', response);
+                toast.error('Assessment questions are not properly configured. Please run the INSERT_ASSESSMENT_QUESTIONS.sql script.');
+                setIsLoading(false);
+                return;
+            }
+            
+            if (response.questions.length === 0) {
+                console.error('Empty questions array');
+                toast.error('No assessment questions found. Please ensure the database has been seeded with questions.');
+                setIsLoading(false);
+                return;
+            }
+            
+            // Valid response with questions
+            const startedAt = startTime || new Date().toISOString();
+            if (!startTime) {
+                setStartTime(startedAt);
+                setElapsedSeconds(0);
+            }
+            setAssessmentQuestions(response.questions);
+            setCurrentQuestion(0);
+            setUserAnswers({});
+            console.log(`[${config.type}] Loaded ${response.questions.length} questions`);
+            setStage('assessment');
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                stage: 'assessment',
+                questions: response.questions,
+                currentQ: 0,
+                answers: {},
+                startTime: startedAt
+            }));
+            setRestoredProgress(true);
             
         } catch (error: any) {
             console.error(`[${config.type}] Error loading assessment:`, error);
+            
+            // Provide specific error messages
+            if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
+                toast.error('Request timed out. Please check your connection and try again.');
+                setIsLoading(false);
+                setStage('intro');
+                return;
+            }
             
             // Check if error is 400 (assessment already completed)
             if (error?.response?.status === 400) {
@@ -447,6 +480,11 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
 
     // Submit assessment when all questions answered
     const handleSubmitAssessment = () => {
+        if (isLoading) {
+            console.log(`[${config.type}] Already submitting, skipping duplicate submission...`);
+            return;
+        }
+        
         if (!allQuestionsAnswered()) {
             toast.error(`Please answer all ${assessmentQuestions.length} questions before submitting`);
             return;
@@ -540,30 +578,40 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
                 
                 console.log(`[${config.type}] About to update state - results and stage`);
                 
-                // Update results first
-                setResults(transformedResults);
-                
-                // Use setTimeout to ensure state is updated before changing stage
-                setTimeout(() => {
-                    setStage('results');
-                    console.log(`[${config.type}] State updated to results - rendering now`);
-                }, 100);
-                
-                localStorage.removeItem(STORAGE_KEY); // Clear progress after completion
+                // Clear progress and reset state BEFORE setting results
+                localStorage.removeItem(STORAGE_KEY);
                 setRestoredProgress(false);
                 setStartTime(null);
                 setElapsedSeconds(0);
                 setAssessmentQuestions([]);
                 setCurrentQuestion(0);
                 setUserAnswers({});
+                
+                // Update results and stage together to avoid race conditions
+                setResults(transformedResults);
+                setStage('results');
+                console.log(`[${config.type}] State updated to results - rendering now`);
+                
                 toast.success('Assessment completed!');
             } else {
-                toast.error('Failed to save results');
+                console.error(`[${config.type}] Invalid results structure:`, response);
+                toast.error('Failed to save results. Please try again.');
             }
             
-        } catch (error) {
+        } catch (error: any) {
             console.error(`[${config.type}] Error calculating results:`, error);
-            toast.error('Failed to submit assessment. Please try again.');
+            
+            // Provide more specific error messages
+            if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
+                toast.error('Request timed out. Please check your connection and try again.');
+            } else if (error?.response?.status === 500) {
+                toast.error('Server error while processing results. Please try again.');
+            } else if (error?.response?.status === 401) {
+                toast.error('Session expired. Please log in again.');
+                router.push('/auth/login');
+            } else {
+                toast.error('Failed to submit assessment. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -736,6 +784,7 @@ export default function AssessmentPageBase({ config }: { config: AssessmentConfi
                 currentCategory={currentCategoryName}
                 categoryIcon={currentCategoryIcon}
                 elapsedSeconds={elapsedSeconds}
+                isSubmitting={isLoading}
             />
         );
     }
