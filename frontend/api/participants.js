@@ -88,7 +88,54 @@ export const getAllParticipants = async (room_id, type='user', withXp=false, com
     }
   }
 };
+// =====================================================
+// ACTIVE TRACKING API
+// =====================================================
 
+export const updateParticipantHeartbeat = async (roomId, data) => {
+  try {
+    await api.put(`/participants/heartbeat/${roomId}`, data);
+    return { success: true };
+  } catch (error) {
+    console.warn('[Heartbeat] Failed:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getActiveParticipants = async (roomId) => {
+  try {
+    const res = await api.get(`/participants/active/room/${roomId}`);
+    return {
+      success: true,
+      data: res.data.data || []
+    };
+  } catch (error) {
+    return {
+      success: false,
+      data: [],
+      error: error.message
+    };
+  }
+};
+
+export const getActiveCompetitionParticipants = async (competitionId) => {
+  try {
+    console.log('[API] Fetching active participants for competition:', competitionId);
+    const res = await api.get(`/participants/active/competition/${competitionId}`);
+    console.log('[API] Active participants response:', res.data);
+    return {
+      success: true,
+      data: res.data.data || []
+    };
+  } catch (error) {
+    console.error('[API] Failed to fetch active participants:', error);
+    return {
+      success: false,
+      data: [],
+      error: error.message
+    };
+  }
+};
 export const kickParticipant = async (room_id, part_id) => {
   try {
     console.log({room_id, part_id});

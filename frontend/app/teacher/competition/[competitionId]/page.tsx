@@ -1,20 +1,25 @@
 "use client"
 
-import { use, useEffect, useState, Suspense, useRef } from 'react'
+import { use, useEffect, useState, Suspense, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useCompetitionManagement } from '@/hooks/useCompetitionManagement'
 import { useCompetitionRealtime } from '@/hooks/useCompetitionRealtime'
 import { useCompetitionTimer } from '@/hooks/useCompetitionTimer'
+import { useParticipantHeartbeat } from '@/hooks/useParticipantHeartbeat'
+import { useSubmissionViewer } from '@/hooks/useSubmissionViewer'
 import { getRoomProblems } from '@/api/problems'
 import { Problem } from '@/types/common/competition'
+import PageHeader from '@/components/PageHeader'
 import {
-  CompetitionHeader,
   CompetitionControls,
   ProblemsManagement,
   ParticipantsLeaderboard
 } from '@/components/competition'
+import SubmissionFilters from '@/components/competition/teacher/SubmissionFilters'
+import SubmissionDisplay from '@/components/competition/teacher/SubmissionDisplay'
 import LoadingOverlay from '@/components/LoadingOverlay'
+import dashboardStyles from '@/styles/dashboard-wow.module.css'
 import styles from '@/styles/competition-teacher.module.css'
 
 // Inner component that uses useSearchParams
@@ -57,6 +62,14 @@ function TeacherCompetitionContent({ competitionId }: { competitionId: number })
     participants: liveParticipants,
     activeParticipants
   } = useCompetitionRealtime(competitionId, false, roomId || '', 'creator')
+
+  // Send heartbeat to track teacher's active status (enabled: false since teachers shouldn't be tracked)
+  // But we keep it here commented out in case we want to track teacher presence in the future
+  // useParticipantHeartbeat(roomId || '', {
+  //   isInCompetition: false,
+  //   competitionId: null,
+  //   enabled: false
+  // });
 
   console.log('📊 [Teacher Page] Real-time hook returned:', {
     liveCompetition: !!liveCompetition,
@@ -167,6 +180,12 @@ function TeacherCompetitionContent({ competitionId }: { competitionId: number })
     return filtered;
   })()
 
+  // Use submission viewer hook for shared state between columns
+  const submissionViewerState = useSubmissionViewer(
+    localAddedProblems,
+    displayParticipants
+  );
+
   // Fetch available problems
   const fetchAvailableProblems = async () => {
     if (!roomId) return
@@ -256,7 +275,49 @@ function TeacherCompetitionContent({ competitionId }: { competitionId: number })
   }
 
   const handlePrintResults = () => {
-    window.print()
+    // Generate CSV data
+    const problems = localAddedProblems.map(cp => cp.problem);
+    const participants = displayParticipants;
+    
+    // CSV Headers: Student Name, Problem 1, Problem 2, ..., Total XP
+    const headers = ['Student Name', ...problems.map((p, idx) => `Problem ${idx + 1}: ${p.title}`), 'Total XP'];
+    
+    // CSV Rows: Each row is a student with their scores per problem
+    const rows = participants.map(participant => {
+      const row = [participant.fullName || 'Unknown'];
+      
+      // Add scores for each problem (if available from submissions)
+      problems.forEach((problem, idx) => {
+        // For now, show problem XP or empty if not submitted
+        // You can enhance this with actual submission data if available
+        const submitted = idx < (displayCompetition.current_problem_index || 0);
+        row.push(submitted ? problem.expected_xp.toString() : '');
+      });
+      
+      // Add total XP
+      row.push((participant.accumulated_xp || 0).toString());
+      
+      return row;
+    });
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', `competition_${displayCompetition.title.replace(/[^a-z0-9]/gi, '_')}_results.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   // Only show full loading overlay for initial load, not for action loading (pause/resume/etc)
@@ -321,56 +382,325 @@ function TeacherCompetitionContent({ competitionId }: { competitionId: number })
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.mainContainer}>
-        {/* Header */}
-        <CompetitionHeader
-          title={displayCompetition.title}
-          status={displayCompetition.status}
-          timer={formattedTime}
-          participantCount={displayParticipants.length}
-          activeCount={displayParticipants.length}
-          onBack={handleBack}
-          onPrint={handlePrintResults}
-        />
+    <div className={dashboardStyles["dashboard-container"]}>
+      <div className={styles.container}>
+        <div className={styles.mainContainer}>
+          {/* Header */}
+          <PageHeader
+            title={displayCompetition.title}
+            subtitle={
+              <div style={{ 
+                display: 'flex', 
+                gap: '2rem', 
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                marginTop: '0.5rem'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  padding: '0.5rem 1rem',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  borderRadius: '0.5rem',
+                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Timer</span>
+                  <span style={{ fontSize: '1.125rem', fontWeight: '700', color: '#2C514C', fontFamily: 'monospace' }}>{formattedTime}</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  padding: '0.5rem 1rem',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  borderRadius: '0.5rem',
+                  border: '1px solid rgba(59, 130, 246, 0.2)'
+                }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Participants</span>
+                  <span style={{ fontSize: '1.125rem', fontWeight: '700', color: '#2C514C', fontFamily: 'monospace' }}>{displayParticipants.length}</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  padding: '0.5rem 1rem',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  borderRadius: '0.5rem',
+                  border: '1px solid rgba(16, 185, 129, 0.2)'
+                }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Active</span>
+                  <span style={{ fontSize: '1.125rem', fontWeight: '700', color: '#10b981', fontFamily: 'monospace' }}>{[...new Set(displayActiveParticipants.filter((ap: any) => ap.role !== 'teacher' && ap.id !== userProfile?.id).map((ap: any) => ap.id))].length}</span>
+                </div>
+                <div style={{
+                  padding: '0.5rem 1rem',
+                  background: displayCompetition.status === 'NEW' ? 'rgba(6, 182, 212, 0.1)' : 
+                             displayCompetition.status === 'ONGOING' ? 'rgba(16, 185, 129, 0.1)' : 
+                             'rgba(107, 114, 128, 0.1)',
+                  borderRadius: '0.5rem',
+                  border: `1px solid ${displayCompetition.status === 'NEW' ? 'rgba(6, 182, 212, 0.3)' : 
+                             displayCompetition.status === 'ONGOING' ? 'rgba(16, 185, 129, 0.3)' : 
+                             'rgba(107, 114, 128, 0.3)'}`,
+                  fontWeight: '700',
+                  fontSize: '0.875rem',
+                  color: displayCompetition.status === 'NEW' ? '#06b6d4' : 
+                         displayCompetition.status === 'ONGOING' ? '#10b981' : 
+                         '#6b7280',
+                  textTransform: 'uppercase'
+                }}>
+                  {displayCompetition.status}
+                </div>
+              </div>
+            }
+            showAvatar={false}
+            actionButton={
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <CompetitionControls
+                    competition={displayCompetition}
+                    addedProblems={addedProblems}
+                    onStart={handleStart}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    onNext={handleNext}
+                    loading={loading}
+                  />
+                </div>
+                <button 
+                  onClick={handlePrintResults}
+                  style={{
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    color: '#16a34a',
+                    border: '2px solid rgba(34, 197, 94, 0.3)',
+                    padding: '12px 24px',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    height: '44px'
+                  }}
+                >
+                  📊 Print Results
+                </button>
+                <button 
+                  onClick={handleBack}
+                  style={{
+                    background: 'linear-gradient(135deg, #22c55e 0%, #84cc16 100%)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 24px',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    fontSize: '14px',
+                    height: '44px'
+                  }}
+                >
+                  Back
+                </button>
+              </div>
+            }
+          />
 
         {/* Scrollable Content */}
         <div className={styles.scrollableContent}>
-          {/* Competition Controls */}
-          <div className={styles.header}>
-            <div className={styles.headerContent}>
-              <CompetitionControls
-                competition={displayCompetition}
-                addedProblems={addedProblems}
-                onStart={handleStart}
-                onPause={handlePause}
-                onResume={handleResume}
-                onNext={handleNext}
-                loading={loading}
+          {/* Main Content */}
+          <div className={styles.roomContent}>
+            {/* Added Problems / Filter Column - First Column */}
+            <div className={styles.leftColumn}>
+              {displayCompetition.status === 'NEW' && (
+                <div className={styles.section}>
+                  <div className={styles.sectionHeader}>
+                    <h2 className={styles.sectionTitle}>Added Problems</h2>
+                    <span className={styles.badge}>{localAddedProblems.length}</span>
+                  </div>
+                  
+                  {localAddedProblems.length > 0 ? (
+                    <div className={styles.problemsList}>
+                      {localAddedProblems.map((compeProblem, index) => (
+                        <div key={`added-${compeProblem.problem.id}-${index}`} className={styles.problemCard}>
+                          <div className={styles.problemContent}>
+                            <div className={styles.problemLeft}>
+                              <div className={styles.problemRank}>{index + 1}</div>
+                              <div className={styles.problemInfo}>
+                                <h3 className={styles.problemTitle}>
+                                  {compeProblem.problem.title || 'Untitled Problem'}
+                                </h3>
+                                <div className={styles.problemMeta}>
+                                  <span 
+                                    className={styles.problemDifficulty}
+                                    data-difficulty={compeProblem.problem.difficulty}
+                                  >
+                                    {compeProblem.problem.difficulty}
+                                  </span>
+                                  <span className={styles.problemXp}>
+                                    {compeProblem.problem.expected_xp} XP
+                                  </span>
+                                  <span 
+                                    className={styles.visibilityBadge}
+                                    data-visibility={compeProblem.problem.visibility}
+                                  >
+                                    {compeProblem.problem.visibility === 'public' ? 'Public' : 'Private'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className={styles.problemRight}>
+                              <div className={styles.problemTimer}>
+                                {compeProblem.timer != null && compeProblem.timer > 0 
+                                  ? `${compeProblem.timer}s` 
+                                  : <span className={styles.noTimer}>No timer</span>
+                                }
+                              </div>
+
+                              {displayCompetition.status === 'NEW' && (
+                                <button
+                                  className={styles.removeButton}
+                                  onClick={() => handleRemoveProblem(compeProblem.problem)}
+                                  title="Remove from competition"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '2rem',
+                      textAlign: 'center',
+                      color: '#9ca3af',
+                      fontSize: '0.875rem'
+                    }}>
+                      No problems added yet. Add problems from the available list.
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Show filters during ONGOING and DONE */}
+              {(displayCompetition.status === 'ONGOING' || displayCompetition.status === 'DONE') && (
+                <SubmissionFilters
+                  problems={submissionViewerState.problems}
+                  participants={submissionViewerState.participants}
+                  selectedProblem={submissionViewerState.selectedProblem}
+                  selectedParticipant={submissionViewerState.selectedParticipant}
+                  onSelectProblem={(problem) => {
+                    submissionViewerState.setSelectedProblem(problem);
+                    submissionViewerState.setSelectedParticipant(null);
+                  }}
+                  onSelectParticipant={submissionViewerState.setSelectedParticipant}
+                />
+              )}
+            </div>
+
+            {/* Available Problems / Submission Display - Second Column */}
+            <div className={styles.middleColumn}>
+              {displayCompetition.status === 'NEW' && (
+                <>
+                  <div className={styles.sectionHeader}>
+                    <h2 className={styles.sectionTitle}>Available Problems</h2>
+                    <span className={styles.badge}>
+                      {availableProblems.filter(p => 
+                        !localAddedProblems.some(ap => ap.problem.id === p.id)
+                      ).length}
+                    </span>
+                  </div>
+                  
+                  <div className={styles.problemsList}>
+                    {availableProblems
+                      .filter(problem => 
+                        !localAddedProblems.some(ap => ap.problem.id === problem.id)
+                      )
+                      .map((problem, index) => {
+                        const canAdd = problem.timer && problem.timer > 0
+                        return (
+                          <div key={`available-${problem.id}-${index}`} className={styles.problemCard}>
+                            <div className={styles.problemContent}>
+                              <div className={styles.problemLeft}>
+                                <div className={styles.problemRank}>{index + 1}</div>
+                                <div className={styles.problemInfo}>
+                                  <h3 className={styles.problemTitle}>
+                                    {problem.title || 'Untitled Problem'}
+                                  </h3>
+                                  <div className={styles.problemMeta}>
+                                    <span 
+                                      className={styles.problemDifficulty}
+                                      data-difficulty={problem.difficulty}
+                                    >
+                                      {problem.difficulty}
+                                    </span>
+                                    <span className={styles.problemXp}>
+                                      {problem.expected_xp} XP
+                                    </span>
+                                    <span 
+                                      className={styles.visibilityBadge}
+                                      data-visibility={problem.visibility}
+                                    >
+                                      {problem.visibility === 'public' ? 'Public' : 'Private'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className={styles.problemRight}>
+                                <div className={styles.problemTimer}>
+                                  {problem.timer != null && problem.timer > 0 
+                                    ? `${problem.timer}s` 
+                                    : <span className={styles.noTimer}>No timer</span>
+                                  }
+                                </div>
+                                <button
+                                  className={styles.addButton}
+                                  disabled={!canAdd}
+                                  onClick={() => handleAddProblem(problem)}
+                                  title={!canAdd ? 'Set timer first' : 'Add to competition'}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </>
+              )}
+              
+              {/* Show submission display during ONGOING and DONE */}
+              {(displayCompetition.status === 'ONGOING' || displayCompetition.status === 'DONE') && (
+                <SubmissionDisplay
+                  selectedProblem={submissionViewerState.selectedProblem}
+                  selectedParticipant={submissionViewerState.selectedParticipant}
+                  submission={submissionViewerState.submission}
+                  loading={submissionViewerState.loading}
+                  competitionId={competitionId}
+                  roomId={roomId || ''}
+                />
+              )}
+            </div>
+
+            {/* Participants - Third Column */}
+            <div className={styles.rightColumn}>
+              <ParticipantsLeaderboard 
+                participants={displayParticipants} 
+                activeParticipants={displayActiveParticipants}
+                currentProblemIndex={displayCompetition.current_problem_index}
+                competitionStatus={displayCompetition.status}
+                currentUserId={userProfile?.id}
               />
             </div>
           </div>
-
-          {/* Main Content */}
-          <div className={styles.roomContent}>
-            {/* Problems Management */}
-            <ProblemsManagement
-              availableProblems={availableProblems}
-              addedProblems={localAddedProblems}
-              competitionStatus={displayCompetition.status}
-              onAddProblem={handleAddProblem}
-              onRemoveProblem={handleRemoveProblem}
-              onUpdateTimer={handleUpdateTimer}
-            />
-
-            {/* Participants Leaderboard */}
-            <ParticipantsLeaderboard 
-              participants={displayParticipants} 
-              activeParticipants={displayActiveParticipants}
-              currentProblemIndex={displayCompetition.current_problem_index}
-            />
-          </div>
         </div>
+      </div>
       </div>
     </div>
   )

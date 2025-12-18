@@ -39,6 +39,21 @@ export const useRoomRealtime = (roomId, roomCode, fetchRoomDetails) => {
       }
     )
 
+    // Subscribe to room_participants table (active tracking / heartbeats)
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'room_participants',
+        filter: `room_id=eq.${roomId}`
+      },
+      (payload) => {
+        logger.log('[Room Realtime] Active status changed:', payload.eventType, payload.new || payload.old)
+        setLastUpdate(Date.now())
+      }
+    )
+
     // Subscribe to problems table (problems added/updated/deleted)
     channel.on(
       'postgres_changes',
@@ -89,10 +104,10 @@ export const useRoomRealtime = (roomId, roomCode, fetchRoomDetails) => {
         logger.log(`[Room Realtime] ✅ Connected to room ${roomCode}`)
         setIsConnected(true)
       } else if (status === 'CHANNEL_ERROR') {
-        logger.error('[Room Realtime] ❌ Channel error')
+        logger.warn('[Room Realtime] ⚠️ Channel connection issue - retrying...')
         setIsConnected(false)
       } else if (status === 'TIMED_OUT') {
-        logger.error('[Room Realtime] ⏱️ Connection timed out')
+        logger.warn('[Room Realtime] ⏱️ Connection took longer than expected')
         setIsConnected(false)
       } else if (status === 'CLOSED') {
         logger.log('[Room Realtime] 🔌 Channel closed')

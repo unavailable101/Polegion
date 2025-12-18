@@ -13,6 +13,7 @@ import PageHeader from '@/components/PageHeader';
 import CategorySelector from '@/components/practice/CategorySelector';
 import PracticeProgress from '@/components/practice/PracticeProgress';
 import styles from '@/styles/practice.module.css';
+import dashboardStyles from '@/styles/dashboard-wow.module.css';
 
 export default function PracticePage() {
   const router = useRouter();
@@ -39,11 +40,11 @@ export default function PracticePage() {
       detail: 'Choose the category that matches your current lesson or goal.',
     },
     {
-      title: 'Answer & Reflect',
+      title: 'Answer / Reflect',
       detail: 'Read the feedback after each response to reinforce concepts.',
     },
     {
-      title: 'Retake & Master',
+      title: 'Retake / Master',
       detail: 'Retry categories anytime with brand-new question variations.',
     },
   ];
@@ -57,9 +58,7 @@ export default function PracticePage() {
   }
 
   return (
-    // <div className={styles.practicePageContainer}>
-
-    <div>
+    <div className={dashboardStyles['dashboard-container']}>
       {/* Page Header */}
       <PageHeader 
         title="Geometry Practice Hub"

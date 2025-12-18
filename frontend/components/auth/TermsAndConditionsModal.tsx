@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from 'react';
 import { IoClose } from 'react-icons/io5';
 import styles from '@/styles/terms-modal.module.css';
 
@@ -8,13 +9,24 @@ interface TermsAndConditionsModalProps {
 }
 
 export default function TermsAndConditionsModal({ isOpen, onClose }: TermsAndConditionsModalProps) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2>Terms and Conditions & Privacy Notice</h2>
+          <h2>Terms and Conditions / Privacy Notice</h2>
           <button onClick={onClose} className={styles.closeButton}>
             <IoClose />
           </button>

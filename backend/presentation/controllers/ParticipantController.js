@@ -291,6 +291,91 @@ class ParticipantController {
                 });
             }
         }
+
+    // =====================================================
+    // ACTIVE TRACKING ENDPOINTS
+    // =====================================================
+
+    updateHeartbeat = async (req, res) => {
+        const { roomId } = req.params;
+        const { is_in_competition, current_competition_id, session_id } = req.body;
+
+        try {
+            await this.participantService.updateParticipantHeartbeat(
+                req.user.id,
+                roomId,
+                {
+                    is_in_competition,
+                    current_competition_id,
+                    session_id
+                }
+            );
+
+            res.status(200).json({
+                message: 'Heartbeat updated successfully'
+            });
+        } catch (error) {
+            console.error('Error updating heartbeat:', error);
+            
+            if (error.message === 'Participant not found') {
+                return res.status(404).json({
+                    message: 'Participant not found',
+                    error: error.message
+                });
+            }
+
+            res.status(500).json({
+                message: 'Failed to update heartbeat',
+                error: error.message
+            });
+        }
+    }
+
+    getActiveParticipants = async (req, res) => {
+        const { roomId } = req.params;
+
+        try {
+            // Get active participants (service layer handles filtering)
+            const active = await this.participantService.getActiveParticipants(
+                roomId,
+                null // Don't exclude creator for now since we filter in view
+            );
+
+            res.status(200).json({
+                message: 'Active participants retrieved successfully',
+                data: active
+            });
+        } catch (error) {
+            console.error('Error getting active participants:', error);
+            res.status(500).json({
+                message: 'Failed to get active participants',
+                error: error.message
+            });
+        }
+    }
+
+    getActiveCompetitionParticipants = async (req, res) => {
+        const { competitionId } = req.params;
+
+        try {
+            // Get active competition participants (service layer handles filtering)
+            const active = await this.participantService.getActiveCompetitionParticipants(
+                competitionId,
+                null // Don't exclude creator for now since we filter in view
+            );
+
+            res.status(200).json({
+                message: 'Active competition participants retrieved successfully',
+                data: active
+            });
+        } catch (error) {
+            console.error('Error getting active competition participants:', error);
+            res.status(500).json({
+                message: 'Failed to get active competition participants',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = ParticipantController

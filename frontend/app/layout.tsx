@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "bootstrap/dist/css/bootstrap.min.css";
 import { Toaster } from "react-hot-toast";
 import Footer from "@/components/Footer";
 import AppProvider from "@/context/AppProvider";
@@ -26,8 +25,8 @@ export default function RootLayout({
         <meta name="theme-color" content="#2C514C" />
         <link rel="manifest" href="/manifest.json" />
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700&display=swap" rel="stylesheet" />
-        <link rel="icon" type="image/x-icon" href="images/polegionIcon.png" />
-        <link rel="apple-touch-icon" href="images/polegionIcon.png" />
+        <link rel="icon" type="image/webp" href="/images/polegionIcon.webp" />
+        <link rel="apple-touch-icon" href="/images/polegionIcon.webp" />
       </head>
       <body>
         <GlobalLandscapePrompt />
